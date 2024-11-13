@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Network stack
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: "CIDR Block for the VPC"
+  
+  PublicSubnet0Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: "CIDR Block for the Public Subnet 0"
+  
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: "CIDR Block for the Public Subnet 1"
+  
+  PrivateSubnet0Cidr:
+    Type: String
+    Default: "10.0.3.0/24"
+    Description: "CIDR Block for the Private Subnet 0"
+  
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.4.0/24"
+    Description: "CIDR Block for the Private Subnet 1"
+
+  BastionSubnetCidr:
+    Type: String
+    Default: "10.0.5.0/24"
+    Description: "CIDR Block for the Bastion Subnet"
+
+Resources:
+  #VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+        CidrBlock: !Ref VpcCidr
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: VPC
+
+  #Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway
+
+  #Attach Internet Gateway to VPC
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  
+  #Public subnet 0
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet0Cidr
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet0
+
+  #Public subnet 1
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !Select [ 1, !GetAZs  ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1
+
+  #Private subnet 0
+  PrivateSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet0Cidr
+      AvailabilityZone: !Select [ 0, !GetAZs  ]
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet0
+  
+  #Private subnet 1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        CidrBlock: !Ref PrivateSubnet1Cidr
+        AvailabilityZone: !Select [ 1, !GetAZs  ]
+        Tags:
+            - Key: Name
+              Value: PrivateSubnet1
+
+  #Bastion subnet
+  BastionSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref BastionSubnetCidr
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: BastionSubnet
+
+  #NAT Gateway for PublicSubnet0
+  EIPNatGatewayPublicSubnet0:
+    Type: AWS::EC2::EIP
+
+  NatGatewayPublicSubnet0:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNatGatewayPublicSubnet0.AllocationId
+      SubnetId: !Ref PublicSubnet0
+      Tags:
+        - Key: Name
+          Value: NatGatewayPublicSubnet0
+
+  #NAT Gateway for PublicSubnet1
+  EIPNatGatewayPublicSubnet1:
+    Type: AWS::EC2::EIP
+  
+  NatGatewayPublicSubnet1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNatGatewayPublicSubnet1.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: NatGatewayPublicSubnet1
+
+  #Routing for PublicSubnet0
+  RouteTablePublicSubnet0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePublicSubnet0
+
+  RoutePublicSubnet0:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePublicSubnet0
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  RouteTablePublicSubnet0Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet0
+      RouteTableId: !Ref RouteTablePublicSubnet0
+
+  #Routing for PublicSubnet1
+  RouteTablePublicSubnet1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePublicSubnet1
+
+  RoutePublicSubnet1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePublicSubnet1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  RouteTablePublicSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref RouteTablePublicSubnet1
+  
+  #Routing for PrivateSubnet0
+  RouteTablePrivateSubnet0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePrivateSubnet0
+
+  RoutePrivateSubnet0:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivateSubnet0
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayPublicSubnet0
+
+  RouteTablePrivateSubnet0Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet0
+      RouteTableId: !Ref RouteTablePrivateSubnet0
+  
+  #Routing for PrivateSubnet1
+  RouteTablePrivateSubnet1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePrivateSubnet1
+
+  RoutePrivateSubnet1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivateSubnet1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayPublicSubnet1
+
+  RouteTablePrivateSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref RouteTablePrivateSubnet1
+
+  #Routing for BastionSubnet
+  RouteTableBastionSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTableBastionSubnet
+
+  RoutePublicBastionSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableBastionSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  RouteTablePublicBastionSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BastionSubnet
+      RouteTableId: !Ref RouteTableBastionSubnet
+  
+Outputs:
+  VPCId:
+    Description: "The ID of the VPC"
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "VPCId"
+
+  InternetGatewayId:
+    Description: "The ID of the Internet Gateway"
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub "InternetGatewayId"
+
+  PublicSubnet0Id:
+    Description: "The ID of Public Subnet 0"
+    Value: !Ref PublicSubnet0
+    Export:
+      Name: !Sub "PublicSubnet0Id"
+
+  PublicSubnet1Id:
+    Description: "The ID of Public Subnet 1"
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: PublicSubnet1Id
+  
+  PrivateSubnet0Id:
+    Description: "The ID of Private Subnet 0"
+    Value: !Ref PrivateSubnet0
+    Export:
+      Name: PrivateSubnet0Id
+
+  PrivateSubnet1Id:
+    Description: "The ID of Private Subnet 1"
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub "PrivateSubnet1Id"
+
+  BastionSubnetId:
+    Description: "The ID of the Bastion Subnet"
+    Value: !Ref BastionSubnet
+    Export:
+      Name: !Sub "BastionSubnetId"
+
+  NatGatewayPublicSubnet0Id:
+    Description: "The ID of NAT Gateway in Public Subnet 0"
+    Value: !Ref NatGatewayPublicSubnet0
+    Export:
+      Name: !Sub "NatGatewayPublicSubnet0Id"
+
+  NatGatewayPublicSubnet1Id:
+    Description: "The ID of NAT Gateway in Public Subnet 1"
+    Value: !Ref NatGatewayPublicSubnet1
+    Export:
+      Name: !Sub "NatGatewayPublicSubnet1Id"

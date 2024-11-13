@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: SecurityGroup stack
+
+Resources:
+  #Security group for EC2 Instances
+  SecurityGroupEC2InstancePrivateSubnet:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: "Allow HTTP access from the load balancer and SSH access from the bastion host"
+        VpcId: !ImportValue VPCId
+        SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 80
+              ToPort: 80
+              SourceSecurityGroupId: !Ref SecurityGroupLoadBalancerPublicSubnets
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              SourceSecurityGroupId: !Ref SecurityGroupBastionHost
+    
+  #Security group for LoadBalancerPublicSubnets
+  SecurityGroupLoadBalancerPublicSubnets:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: Allow HTTP from the internet
+        VpcId: !ImportValue VPCId
+        SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 80
+              ToPort: 80
+              CidrIp: 0.0.0.0/0
+
+  #Security group for BastionHost
+  SecurityGroupBastionHost:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: "Allow SSH access to the bastion host"
+        VpcId: !ImportValue VPCId
+        SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: 0.0.0.0/0
+
+Outputs:
+  SecurityGroupEC2InstancePrivateSubnetId:
+    Description: "Security Group ID for the EC2 Instances in Private Subnets"
+    Value: !Ref SecurityGroupEC2InstancePrivateSubnet
+    Export:
+      Name: SecurityGroupEC2InstancePrivateSubnetId
+  
+  SecurityGroupLoadBalancerPublicSubnetsId:
+    Description: "Security Group ID for the load balancer"
+    Value: !Ref SecurityGroupLoadBalancerPublicSubnets
+    Export:
+      Name: SecurityGroupLoadBalancerPublicSubnetsId
+  
+  SecurityGroupBastionHostId:
+    Description: "Security Group ID for the bastion host"
+    Value: !Ref SecurityGroupBastionHost
+    Export:
+      Name: SecurityGroupBastionHostId

@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Master Stack
+
+Parameters:
+  SecurityGroupTemplateURL:
+    Type: String
+    Default: https://s3.amazonaws.com/vpc-learning-aws/SecurityGroupStack.yaml
+    Description: "URL for the Security Group nested stack template"
+  NetworkTemplateURL:
+    Type: String
+    Default: https://s3.amazonaws.com/vpc-learning-aws/NetworkStack.yaml
+    Description: "URL for the Network nested stack template"
+  ApplicationTemplateURL:
+    Type: String
+    Default: https://s3.amazonaws.com/vpc-learning-aws/ApplicationStack.yaml
+    Description: "URL for the Application nested stack template"
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: "CIDR block for the VPC"
+  PublicSubnet0Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: "CIDR block for the first public subnet"
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: "CIDR block for the second public subnet"
+  PrivateSubnet0Cidr:
+    Type: String
+    Default: "10.0.3.0/24"
+    Description: "CIDR block for the first private subnet"
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.4.0/24"
+    Description: "CIDR block for the second private subnet"
+  BastionSubnetCidr:
+    Type: String
+    Default: "10.0.5.0/24"
+    Description: "CIDR block for the bastion subnet"
+
+Resources:
+  #nested stack for security group
+  SecurityGroupStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NetworkStack
+    Properties:
+      TemplateURL: !Ref SecurityGroupTemplateURL
+
+  #nested stack for network
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Ref NetworkTemplateURL
+      Parameters:
+        VpcCidr: !Ref VpcCidr
+        PublicSubnet0Cidr: !Ref PublicSubnet0Cidr
+        PublicSubnet1Cidr: !Ref PublicSubnet1Cidr
+        PrivateSubnet0Cidr: !Ref PrivateSubnet0Cidr
+        PrivateSubnet1Cidr: !Ref PrivateSubnet1Cidr
+        BastionSubnetCidr: !Ref BastionSubnetCidr
+  
+  #nested stack for application
+  ApplicationStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - NetworkStack
+      - SecurityGroupStack
+    Properties:
+      TemplateURL: !Ref ApplicationTemplateURL
+      Parameters:
+        VPCBastionHostKeyName: VPC-BastionHost
+        EC2InstanceKeyName: VPC-EC2
+        ImageId: ami-06b21ccaeff8cd686
+        InstanceType: t2.micro

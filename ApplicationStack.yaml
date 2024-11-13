@@ -1,0 +1,205 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Application stack
+
+Parameters:
+  VPCBastionHostKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: VPC-BastionHost
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the bastion host"
+  
+  EC2InstanceKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: VPC-EC2
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the EC2 instance"
+
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-06b21ccaeff8cd686
+    Description: "Amazon Machine Image ID"
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: "Instance type"
+
+Resources:
+
+  #BastionHost EIP
+  BastionHostEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+        Domain: vpc
+
+  #BastionHost
+  BastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref ImageId
+        SubnetId: !ImportValue BastionSubnetId
+        KeyName: !Ref VPCBastionHostKeyName
+        SecurityGroupIds:
+            - !ImportValue SecurityGroupBastionHostId
+        Tags:
+            - Key: Name
+              Value: BastionHost
+
+  # Associate the EIP with the Bastion Host
+  BastionHostEIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+        AllocationId: !GetAtt BastionHostEIP.AllocationId
+        InstanceId: !Ref BastionHost
+
+  # Launch Template for Instance
+  LaunchTemplateInstance:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+        LaunchTemplateName: LaunchTemplateInstance
+        LaunchTemplateData:
+            KeyName: !Ref EC2InstanceKeyName
+            InstanceType: !Ref InstanceType
+            ImageId: !Ref ImageId
+            NetworkInterfaces:
+                - DeviceIndex: 0
+                  AssociatePublicIpAddress: false
+                  Groups:
+                    - !ImportValue SecurityGroupEC2InstancePrivateSubnetId
+            UserData:
+                Fn::Base64: !Sub |
+                  #!/bin/bash
+                  # Create directory and index.html file
+                  cd ~
+                  echo "<h1>Server Details</h1><p><strong>Hostname:</strong> $(hostname)</p><p><strong>IP Address:</strong> $(hostname -I | cut -d ' ' -f1)</p>" > ~/index.html
+                  
+                  # Create the systemd service file for the HTTP server
+                  cat <<EOF > /etc/systemd/system/myserver.service
+                  [Unit]
+                  Description=Simple HTTP Server
+                  After=network.target
+
+                  [Service]
+                  ExecStart=/usr/bin/python3 -m http.server 80
+                  Restart=always
+                  User=root
+                  WorkingDirectory=~
+
+                  [Install]
+                  WantedBy=multi-user.target
+                  EOF
+
+                  # Reload systemd to register the new service
+                  systemctl daemon-reload
+
+                  # Enable the service to start on boot
+                  systemctl enable myserver
+
+                  # Start the service immediately
+                  systemctl start myserver
+
+  #Load balancer in public subnets
+  LoadBalancerPublicSubnets:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+        Subnets:
+            - !ImportValue PublicSubnet0Id
+            - !ImportValue PublicSubnet1Id
+        SecurityGroups:
+            - !ImportValue SecurityGroupLoadBalancerPublicSubnetsId
+        Type: application
+        Scheme: internet-facing
+        Tags:
+            - Key: Name
+              Value: LoadBalancerPublicSubnets
+
+  #Target group for LoadBalancerPublicSubnets
+  TargetGroupLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+        Name: TargetGroupLoadBalancer
+        Port: 80
+        Protocol: HTTP
+        VpcId: !ImportValue VPCId
+        TargetType: instance
+        HealthCheckProtocol: HTTP
+        HealthCheckPort: 80
+        HealthCheckPath: /index.html
+
+  #Load balancer listener
+  ListenerLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+        DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref TargetGroupLoadBalancer
+        LoadBalancerArn: !Ref LoadBalancerPublicSubnets
+        Port: 80
+        Protocol: HTTP
+
+  #Auto scaling group
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+        MinSize: 1
+        MaxSize: 4
+        DesiredCapacity: 2
+        LaunchTemplate:
+          LaunchTemplateId: !Ref LaunchTemplateInstance
+          Version: !GetAtt LaunchTemplateInstance.LatestVersionNumber
+        TargetGroupARNs:
+            - !Ref TargetGroupLoadBalancer
+        VPCZoneIdentifier:
+            - !ImportValue PrivateSubnet0Id
+            - !ImportValue PrivateSubnet1Id
+        Tags:
+            - Key: Name
+              Value: AutoScalingGroup
+              PropagateAtLaunch: false
+
+  #Target tracking scaling policy
+  TargetTrackingScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50.0
+
+Outputs:
+    BastionHostId:
+      Description: "ID of the Bastion Host"
+      Value: !Ref BastionHost
+      Export:
+        Name: BastionHostId
+      
+    BastionHostEIP:
+      Description: "Elastic IP of the Bastion Host"
+      Value: !Ref BastionHostEIP
+      Export:
+        Name: BastionHostEIP
+
+    LoadBalancerArn:
+      Description: "ARN of the Public Load Balancer"
+      Value: !Ref LoadBalancerPublicSubnets
+      Export:
+        Name: LoadBalancerArn
+
+    TargetGroupLoadBalancerArn:
+      Description: "ARN of the Target Group associated with Load Balancer"
+      Value: !Ref TargetGroupLoadBalancer
+      Export:
+        Name: TargetGroupLoadBalancerArn
+
+    AutoScalingGroupName:
+      Description: "Name of the Auto Scaling Group"
+      Value: !Ref AutoScalingGroup
+      Export:
+        Name: AutoScalingGroupName
+
+    ListenerLoadBalancerArn:
+      Description: "ARN of the Load Balancer Listener"
+      Value: !Ref ListenerLoadBalancer
+      Export:
+        Name: ListenerLoadBalancerArn
