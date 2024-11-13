@@ -64,18 +64,22 @@ The main stack (`MasterStack.yaml`) defines nested stack URLs for the following:
    ```
 
 2. **Upload Nested Templates to S3**
+
    Upload the `NetworkStack.yaml`, `SecurityGroupStack.yaml`, and `ApplicationStack.yaml` templates to an S3 bucket and note their URLs. 
 
 3. **Update `MasterStack.yaml` with the correct S3 URLs**
+
    Change S3 URLs under `SecurityGroupTemplateURL`, `NetworkTemplateURL`, and `ApplicationTemplateURL` in the `MasterStack.yaml` template.
 
 3. **Deploy the Master Stack**
+
    After the nested templates are uploaded to S3, use the AWS CLI or Management Console to deploy `MasterStack.yaml`
    ```bash
    aws cloudformation create-stack --stack-name VPC-production --template-body file://MasterStack.yaml --parameters ParameterKey=VpcCidr,ParameterValue=10.0.0.0/16 ...
    ```
 
 4. **Monitor Stack Creation**
+
    Wait for stack creation to complete. You can view progress in the CloudFormation console or with:
    ```bash
    aws cloudformation describe-stacks --stack-name VPCProduction
