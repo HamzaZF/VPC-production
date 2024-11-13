@@ -25,7 +25,7 @@ The structure follows AWS best practices for network security and scalability, e
 
 The following diagram illustrates the overall VPC architecture:
 
-![VPC Architecture](VPC-production.svg){ style="display: block; margin: 0 auto;" }
+![VPC Architecture](VPC-production.svg)
 
 ## CloudFormation Templates
 
