@@ -10,7 +10,6 @@ This project sets up a production-ready Virtual Private Cloud (VPC) environment 
 - [Features](#features)
 - [Setup Instructions](#setup-instructions)
 - [Parameter Details](#parameter-details)
-- [Outputs](#outputs)
 - [License](#license)
 
 ## Project Overview
@@ -26,7 +25,7 @@ The structure follows AWS best practices for network security and scalability, e
 
 The following diagram illustrates the overall VPC architecture:
 
-![VPC Architecture](VPC-production.svg)
+![VPC Architecture](VPC-production.svg){ style="display: block; margin: 0 auto;" }
 
 ## CloudFormation Templates
 
